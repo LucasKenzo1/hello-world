@@ -40,5 +40,5 @@ jobs:
             set -e
             cd /home/deploy/hello-world
             rm -rf .git || true
-            docker compose pull || true
-            docker compose up -d --build
+            docker-compose pull || true
+            docker-compose up -d --build
