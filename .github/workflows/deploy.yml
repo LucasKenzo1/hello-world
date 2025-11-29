@@ -12,23 +12,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # cria a chave SSH no runner (para o rsync)
       - name: Prepare SSH key for rsync
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
+      # copia os arquivos do repo inteiro para a EC2
       - name: Sync files to server
         run: |
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -p ${{ secrets.SERVER_PORT }}" \
             ./ deploy@${{ secrets.SERVER_HOST }}:/home/deploy/hello-world/
 
+      # entra via SSH e roda o compose
       - name: Run deploy commands on server (appleboy with inline key)
         uses: appleboy/ssh-action@v0.1.9
         with:
@@ -39,6 +42,10 @@ jobs:
           script: |
             set -e
             cd /home/deploy/hello-world
+
+            # limpa .git para segurança (evita expor o repo na VM)
             rm -rf .git || true
+
+            # sobe stack docker
             docker-compose pull || true
             docker-compose up -d --build
