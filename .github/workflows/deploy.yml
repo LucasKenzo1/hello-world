@@ -1,4 +1,4 @@
-name: CI/CD -> EC2 via SSH (rsync) + Docker Compose
+name: CI/CD -> EC2 via SSH (rsync) + Docker Build/Run
 
 on:
   push:
@@ -17,21 +17,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      # cria a chave SSH no runner (para o rsync)
+      # Prepara chave SSH para o rsync
       - name: Prepare SSH key for rsync
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
-      # copia os arquivos do repo inteiro para a EC2
+      # Sincroniza os arquivos do projeto para a VM
       - name: Sync files to server
         run: |
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -p ${{ secrets.SERVER_PORT }}" \
             ./ deploy@${{ secrets.SERVER_HOST }}:/home/deploy/hello-world/
 
-      # entra via SSH e roda o compose
+      # Conecta via SSH e faz o deploy manual com docker build + docker run
       - name: Run deploy commands on server (appleboy with inline key)
         uses: appleboy/ssh-action@v0.1.9
         with:
@@ -43,9 +43,22 @@ jobs:
             set -e
             cd /home/deploy/hello-world
 
-            # limpa .git para segurança (evita expor o repo na VM)
+            # remover repo .git (segurança)
             rm -rf .git || true
 
-            # sobe stack docker
-            docker-compose pull || true
-            docker-compose up -d --build
+            echo "🔧 Buildando imagem Docker..."
+            docker build -t hello-world:latest .
+
+            echo "🛑 Parando container antigo (se existir)..."
+            docker stop hello-world || true
+
+            echo "🗑 Removendo container antigo (se existir)..."
+            docker rm hello-world || true
+
+            echo "🚀 Subindo novo container..."
+            docker run -d --name hello-world -p 3000:3000 --restart=always hello-world:latest
+
+            echo "🧹 Limpando imagens antigas..."
+            docker image prune -f || true
+
+            echo "🎉 Deploy concluído com sucesso!"
