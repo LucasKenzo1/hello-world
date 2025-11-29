@@ -10,37 +10,35 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Prepare SSH key
+      - name: Prepare SSH key for rsync
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          # optional: add server to known_hosts for stricter security
-          # ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Sync files to server
         run: |
-          rsync -avz --delete -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -p ${{ secrets.SERVER_PORT }}" \
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -p ${{ secrets.SERVER_PORT }}" \
             ./ deploy@${{ secrets.SERVER_HOST }}:/home/deploy/hello-world/
 
-      - name: Run deploy commands on server
+      - name: Run deploy commands on server (appleboy with inline key)
         uses: appleboy/ssh-action@v0.1.9
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           port: ${{ secrets.SERVER_PORT }}
-          key_path: ~/.ssh/id_rsa
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
             cd /home/deploy/hello-world
-            # remove .git to avoid accidental exposure on server; comment out if you want to keep git history
             rm -rf .git || true
-            # ensure images pulled (if you use remote images)
             docker compose pull || true
             docker compose up -d --build
